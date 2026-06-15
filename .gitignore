@@ -1,0 +1,3 @@
+movie_recommender/myenv/
+movie_recommender/__pycache__/
+*.pyc
