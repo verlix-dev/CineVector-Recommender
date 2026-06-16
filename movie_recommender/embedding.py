@@ -9,7 +9,7 @@ docs = list(
     model_and_database.collection.find(
         {
             "plot": {"$exists": True},
-            "plot_embedding_hf_": {"$exists": False}
+            "movie_embedding_v2": {"$exists": False}
         }
     )
 )

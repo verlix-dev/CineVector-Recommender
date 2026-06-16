@@ -4,20 +4,51 @@ from embedding import get_embedding
 
 
 def atlas_movie_recommendation(query: str):
+    query = query.lower()
+    stop_words = {
+        "movie",
+        "film",
+        "show",
+        "films",
+        "movies"
+    }
+    filtered_query = " ".join(
+        word for word in query.split()
+        if word not in stop_words
+    )
+    query = filtered_query
 
     results = model_and_database.collection.aggregate([
         {
             "$search": {
                 "index": "atlas_search",
-                "text": {
-                    "query": query,
-                    "path": ["title", "plot", "fullplot", "genres"]
+                "compound": {
+                    "should": [
+                        {
+                            "text": {
+                                "query": query,
+                                "path": "title",
+                                "score": {
+                                    "boost": {
+                                        "value": 3
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "text": {
+                                "query": query,
+                                "path": ["plot", "fullplot", "genres"]
+                            }
+                        }
+                    ]
                 }
             }
         },
         {
             "$project": {
                 "title": 1,
+                "poster": 1,
                 "plot": 1,
                 "genres": 1,
                 "year": 1,
@@ -26,38 +57,32 @@ def atlas_movie_recommendation(query: str):
             }
         },
         {
-            "$limit": 10
+            "$limit": 20
         }
     ])
 
+    recommendations = []
     seen = set()
 
-    for result in results:
-        title = result.get("title")
+    for movie in results:
+
+        title = movie.get("title")
 
         if title in seen:
             continue
 
         seen.add(title)
 
-        print(f"""
-                    Title: {title}
-                    Genres: {' '.join(result.get('genres', []))}
-                    Year: {result.get('year', '')}
-                    Directors: {' '.join(result.get('directors', []))}
-                    Score: {result.get('score', 0):.4f}
-                    Plot: {result.get('plot', '')}
-                """)
-    # seen = set()
-    # for result in results:
-    #     if result.get('title') in seen:
-    #         continue
-    #     seen.add(result.get('title'))
-    #     combined_text = f"""
-    #         Title: {result.get('title','')}
-    #         Genres: {' '.join(result.get('genres', []))}  
-    #         Year: {result.get('year','')}
-    #         Directors: {' '.join(result.get('directors', []))}
-    #         Plot: {result.get('plot','')}
-    #         """
-    #     print(combined_text)
+        recommendations.append({
+            "title": title,
+            "poster": movie.get("poster"),
+            "genres": movie.get("genres"),
+            "year": movie.get("year"),
+            "plot": movie.get("plot"),
+            "score": round(movie.get("score", 0), 3)
+        })
+
+        if len(recommendations) == 10:
+            break
+
+    return recommendations

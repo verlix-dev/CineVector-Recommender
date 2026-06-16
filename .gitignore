@@ -1,3 +1,4 @@
 movie_recommender/myenv/
 movie_recommender/__pycache__/
+movie_recommender/frontend/node_modules/
 *.pyc

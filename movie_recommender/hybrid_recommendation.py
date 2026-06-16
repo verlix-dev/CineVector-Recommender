@@ -2,6 +2,19 @@ import model_and_database
 from embedding import get_embedding
 
 def hybrid_movie_recommendation(query: str):
+    query = query.lower()
+    stop_words = {
+        "movie",
+        "film",
+        "show",
+        "films",
+        "movies"
+    }
+    filtered_query = " ".join(
+        word for word in query.split()
+        if word not in stop_words
+    )
+    query = filtered_query
     query_embedding = get_embedding(query)
 
     vector_results = model_and_database.collection.aggregate(
@@ -9,16 +22,17 @@ def hybrid_movie_recommendation(query: str):
             {
                 "$vectorSearch": {
                     "queryVector": query_embedding,
-                    "path": "plot_embedding_hf_",
-                    "numCandidates": 100,
-                    "limit": 10,
+                    "path": "movie_embedding_v2",
+                    "numCandidates": 200,
+                    "limit": 20,
                     
-                    "index": "vector_index"
+                    "index": "vector_index_v2"
                 }
             },
             {
                 "$project": {
                     "title": 1,
+                    "poster": 1,
                     "plot": 1,
                     "genres": 1,
                     "year": 1,
@@ -34,15 +48,33 @@ def hybrid_movie_recommendation(query: str):
         {
             "$search": {
                 "index": "atlas_search",
-                "text": {
-                    "query": query,
-                    "path": ["title", "plot", "fullplot", "genres"]
+                "compound": {
+                    "should": [
+                        {
+                            "text": {
+                                "query": query,
+                                "path": "title",
+                                "score": {
+                                    "boost": {
+                                        "value": 3
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "text": {
+                                "query": query,
+                                "path": ["plot", "fullplot", "genres"]
+                            }
+                        }
+                    ]
                 }
             }
         },
         {
             "$project": {
                 "title": 1,
+                "poster": 1,
                 "plot": 1,
                 "genres": 1,
                 "year": 1,
@@ -51,24 +83,28 @@ def hybrid_movie_recommendation(query: str):
             }
         },
         {
-            "$limit": 10
+            "$limit": 20
         }
     ])
-
     movie_results = {}
 
 
     for result in atlas_results:
         result['atlas_score'] = result.pop('score', 0)
-        movie_results[result.get('title')] = result
+
+        movie_id = str(result["_id"])
+
+        movie_results[movie_id] = result
 
     for result in vector_results:
         result['vector_score'] = result.pop('score', 0)
-        title = result.get('title')
-        if title in movie_results:
-            movie_results[title].update(result)
+
+        movie_id = str(result["_id"])
+
+        if movie_id in movie_results:
+            movie_results[movie_id].update(result)
         else:
-            movie_results[title] = result        
+            movie_results[movie_id] = result     
 
     max_atlas = max(
         movie.get("atlas_score", 0)
@@ -88,8 +124,9 @@ def hybrid_movie_recommendation(query: str):
         vector_norm = vector / max_vector if max_vector else 0
 
         movie["final_score"] = (
-            0.5 * atlas_norm +
-            0.5 * vector_norm
+            0.4 * atlas_norm +
+            0.4 * vector_norm +
+            0.2 * min(atlas_norm, vector_norm)
         )
 
 
@@ -98,19 +135,21 @@ def hybrid_movie_recommendation(query: str):
         key=lambda x: x.get("final_score",0),
         reverse=True
     )
+    print("Unique movies:", len(movie_results))
+
+    recommendations = []
 
     for movie in results[:10]:
-        print(
-            movie["title"],
-            movie.get("atlas_score", 0),
-            movie.get("vector_score", 0),
-            atlas_norm,
-            vector_norm,
-            movie["final_score"]
-        )
-    print("MAX ATLAS:", max_atlas)
-    print("MAX VECTOR:", max_vector)
+        recommendations.append({
+            "title": movie.get("title"),
+            "poster": movie.get("poster"),
+            "genres": movie.get("genres"),
+            "year": movie.get("year"),
+            "plot": movie.get("plot"),
+            "score": round(movie.get("final_score", 0), 3)
+        })
 
+    return recommendations
     # seen = set()
     # for result in movie_results.values():
     #     if result.get('title') in seen:

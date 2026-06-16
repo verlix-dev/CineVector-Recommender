@@ -2,6 +2,21 @@ import model_and_database
 from embedding import get_embedding
 
 def vector_movie_recommendation(query: str):
+    query = query.lower()
+
+    stop_words = {
+        "movie",
+        "film",
+        "show",
+        "films",
+        "movies"
+    }
+
+    filtered_query = " ".join(
+        word for word in query.split()
+        if word not in stop_words
+    )
+    query = filtered_query
     query_embedding = get_embedding(query)
 
     results = model_and_database.collection.aggregate(
@@ -9,16 +24,17 @@ def vector_movie_recommendation(query: str):
             {
                 "$vectorSearch": {
                     "queryVector": query_embedding,
-                    "path": "plot_embedding_hf_",
+                    "path": "movie_embedding_v2",
                     "numCandidates": 100,
-                    "limit": 10,
+                    "limit": 20,
                     
-                    "index": "vector_index"
+                    "index": "vector_index_v2"
                 }
             },
             {
                 "$project": {
                     "title": 1,
+                    "poster": 1,
                     "plot": 1,
                     "genres": 1,
                     "year": 1,
@@ -30,17 +46,28 @@ def vector_movie_recommendation(query: str):
         ]
     )
 
-
+    recommendations = []
     seen = set()
-    for result in results:
-        if result.get('title') in seen:
+
+    for movie in results:
+
+        title = movie.get("title")
+
+        if title in seen:
             continue
-        seen.add(result.get('title'))
-        combined_text = f"""
-            Title: {result.get('title','')}
-            Genres: {' '.join(result.get('genres', []))}  
-            Year: {result.get('year','')}
-            Directors: {' '.join(result.get('directors', []))}
-            Plot: {result.get('plot','')}
-            """
-        print(combined_text)
+
+        seen.add(title)
+
+        recommendations.append({
+            "title": title,
+            "poster": movie.get("poster"),
+            "genres": movie.get("genres"),
+            "year": movie.get("year"),
+            "plot": movie.get("plot"),
+            "score": round(movie.get("score", 0), 3)
+        })
+
+        if len(recommendations) == 10:
+            break
+
+    return recommendations
