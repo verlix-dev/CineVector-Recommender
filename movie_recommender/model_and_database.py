@@ -4,7 +4,7 @@ import pymongo # type: ignore
 import requests # type: ignore
 from sentence_transformers import SentenceTransformer # type: ignore
 
-client = pymongo.MongoClient("mongodb+srv://priyanshu17900_db_user:5lSPe5NNauWawlEH@cluster0.ew5enq2.mongodb.net/?appName=Cluster0")
+client = pymongo.MongoClient("")#add the mongodb connection here
 db = client.sample_mflix
 collection = db.movies
 
